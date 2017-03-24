@@ -294,6 +294,37 @@ ssize_t up_progmem_ispageerased(size_t page)
   return bwritten;
 }
 
+#if defined(CONFIG_STM32_FLASH_WORKAROUND_DATA_CACHE_CORRUPTION_ON_RWW)
+static void data_cache_disable(void)
+{
+  uint32_t value = getreg32(STM32_FLASH_ACR);
+
+  if (value & FLASH_ACR_DCEN)
+    {
+      value &= ~FLASH_ACR_DCEN;
+      putreg32(value, STM32_FLASH_ACR);
+    }
+}
+
+static void data_cache_enable(void)
+{
+  uint32_t value = getreg32(STM32_FLASH_ACR);
+  if (value & FLASH_ACR_DCEN)
+    {
+      return;
+    }
+
+  /* reset data cache */
+  value |= FLASH_ACR_DCRST;
+  putreg32(value, STM32_FLASH_ACR);
+
+  /* enable data cache */
+  value = getreg32(STM32_FLASH_ACR);
+  value |= FLASH_ACR_DCEN;
+  putreg32(value, STM32_FLASH_ACR);
+}
+#endif
+
 ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 {
   uint16_t *hword = (uint16_t *)buf;
@@ -327,6 +358,10 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
 
   stm32_flash_unlock();
 
+#if defined(CONFIG_STM32_FLASH_WORKAROUND_DATA_CACHE_CORRUPTION_ON_RWW)
+  data_cache_disable();
+#endif
+
   modifyreg32(STM32_FLASH_CR, 0, FLASH_CR_PG);
 
 #if defined(CONFIG_STM32_STM32F40XX)
@@ -358,6 +393,10 @@ ssize_t up_progmem_write(size_t addr, const void *buf, size_t count)
     }
 
   modifyreg32(STM32_FLASH_CR, FLASH_CR_PG, 0);
+
+#if defined(CONFIG_STM32_FLASH_WORKAROUND_DATA_CACHE_CORRUPTION_ON_RWW)
+  data_cache_enable();
+#endif
   return written;
 }
 
